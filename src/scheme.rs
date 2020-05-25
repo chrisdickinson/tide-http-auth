@@ -10,6 +10,9 @@ pub trait Scheme<User: Send + Sync + 'static> {
     async fn authenticate<S>(&self, state: &S, auth_param: &str) -> Result<Option<User>>
         where S: Storage<User, Self::Request> + Send + Sync + 'static;
 
+    fn should_401_on_multiple_values() -> bool { true }
+    fn should_403_on_bad_auth() -> bool { true }
+
     fn header_name() -> &'static str { "Authorization" }
     fn scheme_name() -> &'static str;
 }

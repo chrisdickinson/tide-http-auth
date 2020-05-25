@@ -11,19 +11,20 @@ pub use scheme::{
 };
 
 use std::marker::PhantomData;
-
 use futures::future::BoxFuture;
 use tide::{ Middleware, Next, Request, Response };
 use tide::{ StatusCode, Result };
 use tracing::{info, error};
 
-// this is the middleware!
+/// Middleware for implementing a given [`Scheme`] (Basic, Bearer, Jwt) backed by a given
+/// [`Storage`] backend implemented by the [Tide application
+/// `State`](https://docs.rs/tide/0.9.0/tide/#state).
 pub struct Authentication<User: Send + Sync + 'static, ImplScheme: Scheme<User>> {
     pub(crate) scheme: ImplScheme,
-    header_name: http_types::headers::HeaderName,
     _user_t: PhantomData<User>
 }
 
+#[doc(hidden)]
 impl<User: Send + Sync + 'static, ImplScheme: Scheme<User>> std::fmt::Debug for Authentication<User, ImplScheme> {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
         write!(formatter, "Authentication<Scheme>")?;
@@ -32,22 +33,23 @@ impl<User: Send + Sync + 'static, ImplScheme: Scheme<User>> std::fmt::Debug for 
 }
 
 impl<User: Send + Sync + 'static, ImplScheme: Scheme<User>> Authentication<User, ImplScheme> {
+    /// Create a new authentication middleware with a scheme.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # fn main() -> Result<(), std::io::Error> { block_on(async {
+    /// #
+    /// use tide_http_auth::{ Authentication, BasicAuthScheme };
+    /// Authentication::new(BasicAuthScheme::default());
+    /// # Ok(()) }
+    /// ```
     pub fn new(scheme: ImplScheme) -> Self {
         Self {
             scheme,
 
-            // XXX: parse this once, at instantiation of the middleware
-            header_name: ImplScheme::header_name().parse().unwrap(),
             _user_t: PhantomData::default()
         }
-    }
-
-    fn header_name(&self) -> &http_types::headers::HeaderName {
-        &self.header_name
-    }
-
-    fn scheme_name(&self) -> &str {
-        ImplScheme::scheme_name()
     }
 }
 
@@ -62,7 +64,7 @@ impl<ImplScheme, State, User> Middleware<State> for Authentication<User, ImplSch
     ) -> BoxFuture<'a, Result<Response>> {
         Box::pin(async move {
             // read the header
-            let auth_header = cx.header(self.header_name());
+            let auth_header = cx.header(ImplScheme::header_name());
             if auth_header.is_none() {
                 info!("no auth header, proceeding");
                 return next.run(cx).await;
@@ -74,31 +76,27 @@ impl<ImplScheme, State, User> Middleware<State> for Authentication<User, ImplSch
                 return next.run(cx).await;
             }
 
-            if value.len() > 1 {
-                // including multiple basic auth headers is... uh, a little weird.
-                // fail the request.
+            if value.len() > 1 && ImplScheme::should_401_on_multiple_values() {
                 error!("multiple auth headers, bailing");
                 return Ok(Response::new(StatusCode::Unauthorized));
             }
 
-            let value = value[0].as_str();
-            if !value.starts_with(self.scheme_name()) {
-                info!("not our auth header");
-                return next.run(cx).await;
-            }
+            for value in value {
+                let value = value.as_str();
+                if !value.starts_with(ImplScheme::scheme_name()) {
+                    continue;
+                }
+                let auth_param = &value[ImplScheme::scheme_name().len()..];
+                let state = cx.state();
 
-            let auth_param = &value[self.scheme_name().len()..];
-            let state = cx.state();
-
-            info!("saw auth header, attempting to auth");
-            // we need to grab the appropriate state! state may be
-            let maybe_user = self.scheme.authenticate(state, auth_param).await?;
-
-            if let Some(user) = maybe_user {
-                cx = cx.set_ext(user);
-            } else {
-                error!("Authorization header sent but no user returned, bailing");
-                return Ok(Response::new(StatusCode::Unauthorized));
+                info!("saw auth header, attempting to auth");
+                if let Some(user) = self.scheme.authenticate(state, auth_param).await? {
+                    cx = cx.set_ext(user);
+                    break;
+                } else if ImplScheme::should_403_on_bad_auth() {
+                    error!("Authorization header sent but no user returned, bailing");
+                    return Ok(Response::new(StatusCode::Forbidden));
+                }
             }
 
             return next.run(cx).await;
