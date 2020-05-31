@@ -12,7 +12,7 @@ See the [examples][ref-examples] for more.
 
 # License
 
-MIT
+Apache-2.0
 
 [ref-tide]: https://github.com/http-rs/tide
 [ref-examples]: ./examples/
