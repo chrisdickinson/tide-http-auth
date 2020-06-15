@@ -1,32 +1,31 @@
 mod scheme;
 mod storage;
 
+pub use scheme::{BasicAuthRequest, BasicAuthScheme, BearerAuthRequest, BearerAuthScheme, Scheme};
 pub use storage::Storage;
-pub use scheme::{
-    Scheme,
-    BasicAuthScheme,
-    BasicAuthRequest,
-    BearerAuthScheme,
-    BearerAuthRequest
-};
 
-use std::marker::PhantomData;
 use futures::future::BoxFuture;
-use tide::{ Middleware, Next, Request, Response };
-use tide::{ StatusCode, Result };
-use tracing::{info, error};
+use std::marker::PhantomData;
+use tide::{Middleware, Next, Request, Response};
+use tide::{Result, StatusCode};
+use tracing::{error, info};
 
 /// Middleware for implementing a given [`Scheme`] (Basic, Bearer, Jwt) backed by a given
 /// [`Storage`] backend implemented by the [Tide application
 /// `State`](https://docs.rs/tide/0.9.0/tide/#state).
 pub struct Authentication<User: Send + Sync + 'static, ImplScheme: Scheme<User>> {
     pub(crate) scheme: ImplScheme,
-    _user_t: PhantomData<User>
+    _user_t: PhantomData<User>,
 }
 
 #[doc(hidden)]
-impl<User: Send + Sync + 'static, ImplScheme: Scheme<User>> std::fmt::Debug for Authentication<User, ImplScheme> {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
+impl<User: Send + Sync + 'static, ImplScheme: Scheme<User>> std::fmt::Debug
+    for Authentication<User, ImplScheme>
+{
+    fn fmt(
+        &self,
+        formatter: &mut std::fmt::Formatter<'_>,
+    ) -> std::result::Result<(), std::fmt::Error> {
         write!(formatter, "Authentication<Scheme>")?;
         Ok(())
     }
@@ -48,32 +47,34 @@ impl<User: Send + Sync + 'static, ImplScheme: Scheme<User>> Authentication<User,
         Self {
             scheme,
 
-            _user_t: PhantomData::default()
+            _user_t: PhantomData::default(),
         }
     }
 }
 
 impl<ImplScheme, State, User> Middleware<State> for Authentication<User, ImplScheme>
-    where ImplScheme: Scheme<User> + Send + Sync + 'static,
-          State: Storage<User, ImplScheme::Request> + Send + Sync + 'static,
-          User: Send + Sync + 'static {
+where
+    ImplScheme: Scheme<User> + Send + Sync + 'static,
+    State: Storage<User, ImplScheme::Request> + Send + Sync + 'static,
+    User: Send + Sync + 'static,
+{
     fn handle<'a>(
         &'a self,
-        mut cx: Request<State>,
+        mut req: Request<State>,
         next: Next<'a, State>,
     ) -> BoxFuture<'a, Result<Response>> {
         Box::pin(async move {
             // read the header
-            let auth_header = cx.header(ImplScheme::header_name());
+            let auth_header = req.header(ImplScheme::header_name());
             if auth_header.is_none() {
                 info!("no auth header, proceeding");
-                return next.run(cx).await;
+                return next.run(req).await;
             }
             let value: Vec<_> = auth_header.unwrap().into_iter().collect();
 
             if value.is_empty() {
                 info!("empty auth header, proceeding");
-                return next.run(cx).await;
+                return next.run(req).await;
             }
 
             if value.len() > 1 && ImplScheme::should_401_on_multiple_values() {
@@ -87,11 +88,11 @@ impl<ImplScheme, State, User> Middleware<State> for Authentication<User, ImplSch
                     continue;
                 }
                 let auth_param = &value[ImplScheme::scheme_name().len()..];
-                let state = cx.state();
+                let state = req.state();
 
                 info!("saw auth header, attempting to auth");
                 if let Some(user) = self.scheme.authenticate(state, auth_param).await? {
-                    cx = cx.set_ext(user);
+                    req.set_ext(user);
                     break;
                 } else if ImplScheme::should_403_on_bad_auth() {
                     error!("Authorization header sent but no user returned, bailing");
@@ -99,7 +100,7 @@ impl<ImplScheme, State, User> Middleware<State> for Authentication<User, ImplSch
                 }
             }
 
-            return next.run(cx).await;
+            return next.run(req).await;
         })
     }
 }

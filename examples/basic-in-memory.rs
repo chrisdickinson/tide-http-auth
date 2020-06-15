@@ -1,6 +1,6 @@
-use std::env;
 use std::collections::HashMap;
-use tide_http_auth::{ Storage, BasicAuthRequest };
+use std::env;
+use tide_http_auth::{BasicAuthRequest, Storage};
 
 // We define our user struct like so:
 #[derive(Clone)]
@@ -10,12 +10,12 @@ struct User {
 
     // We include the password here, which is not very secure. This is for
     // illustrative purposes only.
-    password: String
+    password: String,
 }
 
 // We're creating an in-memory map of usernames to users.
 struct ExampleState {
-    users: HashMap<String, User>
+    users: HashMap<String, User>,
 }
 
 impl ExampleState {
@@ -25,9 +25,7 @@ impl ExampleState {
             users.insert(user.username.to_owned(), user);
         }
 
-        ExampleState {
-            users
-        }
+        ExampleState { users }
     }
 }
 
@@ -40,12 +38,12 @@ impl Storage<User, BasicAuthRequest> for ExampleState {
                 // "constant time comparison function" to check if the passwords are equivalent to
                 // avoid a timing attack.
                 if user.password != request.password {
-                    return Ok(None)
+                    return Ok(None);
                 }
 
                 Ok(Some(user.clone()))
-            },
-            None => Ok(None)
+            }
+            None => Ok(None),
         }
     }
 }
@@ -62,22 +60,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         User {
             username: "Basil".to_string(),
             favorite_food: "Cat food".to_string(),
-            password: "cool meow time".to_string()
+            password: "cool meow time".to_string(),
         },
         User {
             username: "Fern".to_string(),
             favorite_food: "Human food".to_string(),
-            password: "hunter2 am I doing this right".to_string()
-        }
+            password: "hunter2 am I doing this right".to_string(),
+        },
     ];
 
     let mut app = tide::with_state(ExampleState::new(users));
 
-    app.middleware(tide_http_auth::Authentication::new(tide_http_auth::BasicAuthScheme::default()));
+    app.middleware(tide_http_auth::Authentication::new(
+        tide_http_auth::BasicAuthScheme::default(),
+    ));
 
     app.at("/").get(hello);
 
-    println!(r#"
+    println!(
+        r#"
 Listening at http://{}/. Open this URL in your browser and input one of the following:
 
 Username: Basil
@@ -86,17 +87,25 @@ Password: cool meow time
 Username: Fern
 Password: hunter2 am I doing this right
 
-"#, &addr);
+"#,
+        &addr
+    );
     app.listen(addr).await?;
 
     Ok(())
 }
 
-async fn hello<State>(ctxt: tide::Request<State>) -> tide::Result<tide::Response> {
-    if let Some(user) = ctxt.ext::<User>() {
-        Ok(format!("hi {}! your favorite food is {}.", user.username, user.favorite_food).into())
+async fn hello<State>(req: tide::Request<State>) -> tide::Result<tide::Response> {
+    if let Some(user) = req.ext::<User>() {
+        Ok(format!(
+            "hi {}! your favorite food is {}.",
+            user.username, user.favorite_food
+        )
+        .into())
     } else {
-        let response: tide::Response = "howdy stranger".to_string().into();
-        Ok(response.set_status(tide::http::StatusCode::Unauthorized).set_header("WWW-Authenticate", "Basic"))
+        let mut response: tide::Response = "howdy stranger".to_string().into();
+        response.set_status(tide::http::StatusCode::Unauthorized);
+        response.insert_header("WWW-Authenticate", "Basic");
+        Ok(response)
     }
 }
