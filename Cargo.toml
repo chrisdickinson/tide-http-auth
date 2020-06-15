@@ -6,6 +6,11 @@ authors       = ["Chris Dickinson <christopher.s.dickinson@gmail.com>"]
 edition       = "2018"
 license       = "Apache-2.0"
 documentation = "https://docs.rs/tide-http-auth"
+homepage      = "https://github.com/chrisdickinson/tide-http-auth"
+repository    = "https://github.com/chrisdickinson/tide-http-auth"
+keywords      = ["auth", "tide", "async", "authentication", "bearer", "basic"]
+categories    = ["asynchronous", "authentication"]
+readme        = "README.md"
 
 [dependencies]
 http-types  = "2.0.0"
