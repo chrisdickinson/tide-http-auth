@@ -1,5 +1,5 @@
 use std::any::Any;
-use tide::Result; 
+use tide::Result;
 
 /// A storage provider. Implementors should pick a concrete `Request` type, representing a
 /// struct or parameter sent by a corresponding [`Scheme`].
