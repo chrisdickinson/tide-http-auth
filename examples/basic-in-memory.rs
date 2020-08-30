@@ -14,6 +14,7 @@ struct User {
 }
 
 // We're creating an in-memory map of usernames to users.
+#[derive(Clone)]
 struct ExampleState {
     users: HashMap<String, User>,
 }
@@ -71,7 +72,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut app = tide::with_state(ExampleState::new(users));
 
-    app.middleware(tide_http_auth::Authentication::new(
+    app.with(tide_http_auth::Authentication::new(
         tide_http_auth::BasicAuthScheme::default(),
     ));
 

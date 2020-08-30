@@ -4,10 +4,8 @@ mod storage;
 pub use scheme::{BasicAuthRequest, BasicAuthScheme, BearerAuthRequest, BearerAuthScheme, Scheme};
 pub use storage::Storage;
 
-use futures::future::BoxFuture;
 use std::marker::PhantomData;
-use tide::{Middleware, Next, Request, Response};
-use tide::{Result, StatusCode};
+use tide::{Middleware, Next, Request, Response, StatusCode};
 use tracing::{error, info};
 
 /// Middleware for implementing a given [`Scheme`] (Basic, Bearer, Jwt) backed by a given
@@ -52,55 +50,49 @@ impl<User: Send + Sync + 'static, ImplScheme: Scheme<User>> Authentication<User,
     }
 }
 
+#[async_trait::async_trait]
 impl<ImplScheme, State, User> Middleware<State> for Authentication<User, ImplScheme>
 where
     ImplScheme: Scheme<User> + Send + Sync + 'static,
-    State: Storage<User, ImplScheme::Request> + Send + Sync + 'static,
+    State: Storage<User, ImplScheme::Request> + Clone + Send + Sync + 'static,
     User: Send + Sync + 'static,
 {
-    fn handle<'a>(
-        &'a self,
-        mut req: Request<State>,
-        next: Next<'a, State>,
-    ) -> BoxFuture<'a, Result<Response>> {
-        Box::pin(async move {
-            // read the header
-            let auth_header = req.header(ImplScheme::header_name());
-            if auth_header.is_none() {
-                info!("no auth header, proceeding");
-                return next.run(req).await;
+    async fn handle(&self, mut req: Request<State>, next: Next<'_, State>) -> tide::Result {
+        // read the header
+        let auth_header = req.header(ImplScheme::header_name());
+        if auth_header.is_none() {
+            info!("no auth header, proceeding");
+            return Ok(next.run(req).await);
+        }
+        let value: Vec<_> = auth_header.unwrap().into_iter().collect();
+
+        if value.is_empty() {
+            info!("empty auth header, proceeding");
+            return Ok(next.run(req).await);
+        }
+
+        if value.len() > 1 && ImplScheme::should_401_on_multiple_values() {
+            error!("multiple auth headers, bailing");
+            return Ok(Response::new(StatusCode::Unauthorized));
+        }
+
+        for value in value {
+            let value = value.as_str();
+            if !value.starts_with(ImplScheme::scheme_name()) {
+                continue;
             }
-            let value: Vec<_> = auth_header.unwrap().into_iter().collect();
+            let auth_param = &value[ImplScheme::scheme_name().len()..];
+            let state = req.state();
 
-            if value.is_empty() {
-                info!("empty auth header, proceeding");
-                return next.run(req).await;
+            info!("saw auth header, attempting to auth");
+            if let Some(user) = self.scheme.authenticate(state, auth_param).await? {
+                req.set_ext(user);
+                break;
+            } else if ImplScheme::should_403_on_bad_auth() {
+                error!("Authorization header sent but no user returned, bailing");
+                return Ok(Response::new(StatusCode::Forbidden));
             }
-
-            if value.len() > 1 && ImplScheme::should_401_on_multiple_values() {
-                error!("multiple auth headers, bailing");
-                return Ok(Response::new(StatusCode::Unauthorized));
-            }
-
-            for value in value {
-                let value = value.as_str();
-                if !value.starts_with(ImplScheme::scheme_name()) {
-                    continue;
-                }
-                let auth_param = &value[ImplScheme::scheme_name().len()..];
-                let state = req.state();
-
-                info!("saw auth header, attempting to auth");
-                if let Some(user) = self.scheme.authenticate(state, auth_param).await? {
-                    req.set_ext(user);
-                    break;
-                } else if ImplScheme::should_403_on_bad_auth() {
-                    error!("Authorization header sent but no user returned, bailing");
-                    return Ok(Response::new(StatusCode::Forbidden));
-                }
-            }
-
-            return next.run(req).await;
-        })
+        }
+        Ok(next.run(req).await)
     }
 }
