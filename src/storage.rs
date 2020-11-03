@@ -11,6 +11,7 @@ use tide::Result;
 /// # fn main() -> Result<(), std::io::Error> { block_on(async {
 /// #
 /// use tide_http_auth::{ Storage, BasicAuthRequest, BasicAuthScheme };
+/// #[derive(Clone)]
 /// struct MyState;
 /// struct MyUserType {
 ///     username: String
@@ -20,10 +21,10 @@ use tide::Result;
 /// // note that we're implementing the concrete "BasicAuthRequest" type here.
 /// #[async_trait::async_trait]
 /// impl Storage<MyUserType, BasicAuthRequest> for MyState {
-///     async fn get_user(&self, request: BasicAuthRequest) -> tide::Result<MyUserType> {
+///     async fn get_user(&self, request: BasicAuthRequest) -> tide::Result<Option<MyUserType>> {
 ///       if request.username == "Basil" && request.password == "meow time now" {
 ///         // If the credential request succeeds, return your user type here.
-///         Ok(Some(MyUserType("Basil".to_string())))
+///         Ok(Some(MyUserType{username: "Basil".to_string()}))
 ///       } else {
 ///         Ok(None) // Nothing went wrong, but these credentials are invalid.
 ///         // you might also return Err here, to indicate a problem talking to the backing store.
@@ -34,7 +35,7 @@ use tide::Result;
 /// let mut app = tide::with_state(state);
 ///
 /// // BasicAuthScheme's ::Request associated type is BasicAuthRequest.
-/// app.middleware(tide_http_auth::Authentication::new(BasicAuthScheme::default()));
+/// app.with(tide_http_auth::Authentication::new(BasicAuthScheme::default()));
 ///
 /// # Ok(()) })}
 /// ```
