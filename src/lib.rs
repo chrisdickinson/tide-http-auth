@@ -35,11 +35,15 @@ impl<User: Send + Sync + 'static, ImplScheme: Scheme<User>> Authentication<User,
     /// # Examples
     ///
     /// ```no_run
-    /// # fn main() -> Result<(), std::io::Error> { block_on(async {
+    /// #[derive(Clone)]
+    /// struct MyUserType {
+    ///     username: String
+    /// }
+    /// # fn main() -> Result<(), std::io::Error> { async_std::task::block_on(async {
     /// #
     /// use tide_http_auth::{ Authentication, BasicAuthScheme };
-    /// Authentication::new(BasicAuthScheme::default());
-    /// # Ok(()) }
+    /// Authentication::<MyUserType, BasicAuthScheme>::new(BasicAuthScheme::default());
+    /// # Ok(()) })}
     /// ```
     pub fn new(scheme: ImplScheme) -> Self {
         Self {

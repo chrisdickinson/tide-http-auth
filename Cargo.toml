@@ -13,15 +13,15 @@ categories    = ["asynchronous", "authentication"]
 readme        = "README.md"
 
 [dependencies]
-http-types  = "2.4.0"
-tide        = "0.13.0"
-tracing     = "0.1.19"
-async-trait = "0.1.40"
-base64      = "0.12.3"
+http-types  = "2.7.0"
+tide        = "0.14.0"
+tracing     = "0.1.21"
+async-trait = "0.1.41"
+base64      = "0.13.0"
 
 [dev-dependencies]
-tide = "0.13.0"
-async-std = { version = "1.6.3", features = ["attributes"] }
+tide = "0.14.0"
+async-std = { version = "1.6.5", features = ["attributes"] }
 
 [[example]]
 name = "basic"
