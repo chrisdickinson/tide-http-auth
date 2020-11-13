@@ -1,7 +1,7 @@
 [package]
 name          = "tide-http-auth"
 description   = "Basic and Bearer auth support for Tide"
-version       = "0.2.0"
+version       = "0.3.0"
 authors       = ["Chris Dickinson <christopher.s.dickinson@gmail.com>"]
 edition       = "2018"
 license       = "Apache-2.0"
