@@ -92,9 +92,11 @@ where
             if let Some(user) = self.scheme.authenticate(state, auth_param).await? {
                 req.set_ext(user);
                 break;
-            } else if ImplScheme::should_403_on_bad_auth() {
+            } else if ImplScheme::should_401_on_bad_auth() {
                 error!("Authorization header sent but no user returned, bailing");
-                return Ok(Response::new(StatusCode::Forbidden));
+                let mut response = Response::new(StatusCode::Unauthorized);
+                response.insert_header("WWW-Authenticate", ImplScheme::scheme_name());
+                return Ok(response);
             }
         }
         Ok(next.run(req).await)
