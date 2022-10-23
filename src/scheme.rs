@@ -14,7 +14,7 @@ pub trait Scheme<User: Send + Sync + 'static> {
     fn should_401_on_multiple_values() -> bool {
         true
     }
-    fn should_403_on_bad_auth() -> bool {
+    fn should_401_on_bad_auth() -> bool {
         true
     }
 
